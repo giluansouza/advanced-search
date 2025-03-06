@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DocumentMetadata;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Elastic\Elasticsearch\ClientBuilder;
+use Illuminate\Support\Facades\Log;
 
 class DocumentController extends Controller
 {
@@ -33,7 +35,7 @@ class DocumentController extends Controller
                     'query' => [
                         'multi_match' => [
                             'query' => $searchQuery,
-                            'fields' => ['title', 'content'],
+                            'fields' => ['title', 'author', 'content'],
                             'fuzziness' => 'AUTO',
                         ]
                     ],
@@ -68,25 +70,57 @@ class DocumentController extends Controller
             'type' => 'required|string',
             'content' => 'required|string',
         ]);
-
-        $document = [
-            'title' => $request->input('title'),
-            'author' => $request->input('author'),
-            'date' => $request->input('date'),
-            'type' => $request->input('type'),
-            'content' => $request->input('content'),
-        ];
-
-        $params = [
-            'index' => 'documents',
-            'body' => $document,
-        ];
+        $success = false;
+        $message = '';
+        $document = DocumentMetadata::create($request->all());
 
         try {
-            $response = $this->elasticSearch->index($params);
-            return redirect()->route('documents.index');
+            // Ensure "documents" index exists in Elasticsearch
+            $indexParams = ['index' => 'documents'];
+            if (!$this->elasticSearch->indices()->exists($indexParams)) {
+                $this->elasticSearch->indices()->create([
+                    'index' => 'documents',
+                    'body'  => [
+                        'settings' => [
+                            'number_of_shards' => 1,
+                            'number_of_replicas' => 0
+                        ],
+                        'mappings' => [
+                            'properties' => [
+                                'title' => ['type' => 'text'],
+                                'author' => ['type' => 'keyword'],
+                                'date' => ['type' => 'date'],
+                                'type' => ['type' => 'keyword'],
+                                'content' => ['type' => 'text']
+                            ]
+                        ]
+                    ]
+                ]);
+            }
+
+            $this->elasticSearch->index([
+                'index' => 'documents',
+                'id' => $document->id,
+                'body' => [
+                    'title' => $document->title,
+                    'author' => $document->author,
+                    'date' => $document->date,
+                    'type' => $document->type,
+                    'content' => $document->content
+                ]
+            ]);
+
+            $message = 'Document created successfully';
+            $success = true;
         } catch (\Exception $e) {
-            return redirect()->route('documents.index')->with('error', $e->getMessage());
+            Log::error($e->getMessage());
+            $message = 'Failed to create document';
+            $success = false;
         }
+
+        return Inertia::render('documents/create', [
+            'message' => $message,
+            'success' => $success,
+        ]);
     }
 }

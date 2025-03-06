@@ -4,12 +4,6 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { PlusIcon, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-interface PageProps {
-    documents: DocumentType[];
-    errorMessage: string | null;
-    searchQuery: string;
-}
-
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Documents',
@@ -52,7 +46,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function Documents() {
     const { documents, errorMessage, searchQuery } = usePage().props;
     const [values, setValues] = useState({
-        search: '',
+        search: searchQuery || '',
     });
 
     function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -76,13 +70,15 @@ export default function Documents() {
                 {/* <div> */}
                 <div className="flex w-full flex-col items-center justify-center gap-4 p-4">
                     <div className="flex w-full flex-row items-center justify-center gap-4">
-                        <h3 className="text-3xl font-bold">Find the documentation you need</h3>
+                        <h3 className="text-3xl font-bold">Search for documents</h3>
                         <a
                             href="/documents/create"
                             className="flex cursor-pointer items-center justify-center gap-1 rounded-full bg-blue-400 px-4 py-2 text-white shadow-md transition-all duration-200 hover:bg-blue-300"
                         >
                             <PlusIcon className="text-white" />
-                            <span className="hidden md:block">Create document</span>
+                            <span className="hidden flex-row sm:flex sm:gap-1">
+                                Create <span className="hidden lg:block">document</span>
+                            </span>
                         </a>
                     </div>
                     <form onSubmit={handleSubmit} className="flex w-full flex-col items-center justify-center gap-4">
