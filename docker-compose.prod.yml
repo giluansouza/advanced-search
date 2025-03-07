@@ -1,0 +1,137 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile
+    image: myapp:production
+    restart: always
+    env_file: .env
+    volumes:
+      - .:/var/www/html
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend
+    depends_on:
+      - pgsql
+      - redis
+      - minio
+      - elasticsearch
+
+  nginx:
+    image: nginx:latest
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - .:/var/www/html
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+    networks:
+      - proxy
+      - backend
+    depends_on:
+      - app
+
+  pgsql:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_DB: search_docs
+      POSTGRES_USER: your_db_user
+      POSTGRES_PASSWORD: your_db_password
+    volumes:
+      - 'pgsql_data:/var/lib/postgresql/data'
+      - './postgresql.conf:/etc/postgresql/postgresql.conf'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 512M
+    networks:
+      - backend
+
+  redis:
+    image: redis:alpine
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:latest
+    restart: always
+    environment:
+      MINIO_ROOT_USER: sail
+      MINIO_ROOT_PASSWORD: password
+    volumes:
+      - 'minio_data:/data'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
+    networks:
+      - backend
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.2
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - backend
+
+  traefik:
+    image: traefik:v2.10
+    restart: always
+    command:
+      - '--api.dashboard=true'
+      - '--providers.docker=true'
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.websecure.address=:443'
+      - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
+      - '--certificatesresolvers.myresolver.acme.email=giluan65@hotmail.com'
+      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
+    ports:
+      - '80:80'
+      - '443:443'
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      - './traefik/acme.json:/letsencrypt/acme.json'
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+  backend:
+    driver: bridge
+
+volumes:
+  pgsql_data:
+  minio_data:
+  esdata:
