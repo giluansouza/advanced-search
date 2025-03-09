@@ -6,8 +6,11 @@ services:
     image: myapp:production
     restart: always
     env_file: .env
-    volumes:
-      - .:/var/www/html
+    # Remove the volume for production; bake the code into the image
+    # volumes:
+    #   - .:/var/www/html
+    ports:
+      - '9000:80' # Expose the app's internal port (e.g., 80) to a port on the host (e.g., 9000)
     deploy:
       resources:
         limits:
@@ -20,14 +23,19 @@ services:
       - redis
       - minio
       - elasticsearch
+    healthcheck:
+      test: ['CMD', 'php', 'artisan', 'health:check'] # Adjust based on your app's healthcheck command
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   pgsql:
     image: postgres:17
     restart: always
     environment:
-      POSTGRES_DB: search_docs
-      POSTGRES_USER: your_db_user
-      POSTGRES_PASSWORD: your_db_password
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - 'pgsql_data:/var/lib/postgresql/data'
       - './postgresql.conf:/etc/postgresql/postgresql.conf'
@@ -38,10 +46,17 @@ services:
           memory: 512M
     networks:
       - netdocs
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-q', '-d', '${DB_DATABASE}', '-U', '${DB_USERNAME}']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   redis:
     image: redis:alpine
     restart: always
+    volumes:
+      - 'redis_data:/data'
     deploy:
       resources:
         limits:
@@ -49,15 +64,21 @@ services:
           memory: 128M
     networks:
       - netdocs
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   minio:
     image: minio/minio:latest
     restart: always
     environment:
-      MINIO_ROOT_USER: sail
-      MINIO_ROOT_PASSWORD: password
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - 'minio_data:/data'
+    command: 'minio server /data --console-address ":9001"'
     deploy:
       resources:
         limits:
@@ -65,6 +86,11 @@ services:
           memory: 256M
     networks:
       - netdocs
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.2
@@ -82,6 +108,11 @@ services:
           memory: 1G
     networks:
       - netdocs
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9200']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   netdocs:
@@ -89,5 +120,6 @@ networks:
 
 volumes:
   pgsql_data:
+  redis_data:
   minio_data:
   esdata:
